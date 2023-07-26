@@ -1,0 +1,33 @@
+{
+    "customer_name": null,
+    "product": "macbook, ipad, iphone",
+    "date": "26-07-2023",
+    "due_date": null,
+    "unit_price": null,
+    "quantity": null,
+    "total_amount": null,
+    "vendor": null,
+    "type_of_transaction": "sales"
+},
+
+{
+    type_of_transaction: "sales",
+    products: [
+        {
+            name: ""
+            unit_price: ""
+            quantity: ""
+            total_amount: ""
+            chart_of_account: ""
+            unit:""
+        }
+    ],
+    vendor:{
+        name: ""
+    },
+    customer:{
+        name: ""
+    },
+    due_date: "",
+    invoice_date: "",
+}
