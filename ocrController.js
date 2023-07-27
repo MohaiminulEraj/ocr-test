@@ -2,109 +2,144 @@ import { ImageAnnotatorClient } from '@google-cloud/vision';
 import { readFile, readFileSync, writeFile } from 'fs';
 import { createWorker } from 'tesseract.js';
 
-function isTabularDataLine(line) {
-    // Check if the line starts with a number
-    return /^\d+/.test(line.trim());
-}
-
-
-
 async function detectTextFromImageUsingTesseract(req, res) {
     try {
         const worker = await createWorker();
         await worker?.loadLanguage('eng');
         await worker?.initialize('eng');
-        const { data: { text } } = await worker?.recognize('./img/service-invoice-template-2x.jpg');
-        // console.log('text\n', text);
+        const { data: { text } } = await worker?.recognize('./img/invoice-1.png');
         let textArray = text.split('\n');
-        // console.log('textArray\n', textArray);
-
-        const invoiceInfo = {};
-        textArray.forEach((text, index) => {
-            if (text.includes('Invoice Date')) {
-                // console.log('pop',textArray[index].substring(textArray[index].indexOf('Invoice Date'), textArray[index].length - 1).split('Invoice Date'))
-                invoiceInfo['invoice_date'] = textArray[index].split(':')[1].trim();
-                // console.log('i', index)
-                // console.log('j', textArray[index].length)
-            }
-            if(text.includes('Due Date')) {
-                invoiceInfo['due_date'] = textArray[index].split(':')[1].trim();
-            }
-            if(text.includes('Bill To')) {
-                invoiceInfo['customer_name'] = textArray[index+1].trim();
-            }
-            
-        });
-
-        // const tableData = textArray.filter((text) => {
-        //     return text.includes('Total') || text.includes('Subtotal') || text.includes('Tax') || text.includes('Balance Due')
-        // })
-
-        
-        // Find the start of the tabular data (where the line contains '# Item & Description Qty Rate Amount')
-        const tabularData = [];
-        const startIndex = textArray.findIndex((line) =>
-            line.includes('# Item & Description Qty Rate Amount')
-        );
-        
-        const tabularMatch = /^(\d+)\s(.+?)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)$/
-        // const tabularMatch = /^(\d+)\s+([\s\S]+?)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)$/
-        // const tabularMatch = /^(\d+)\s+([^\d].+?)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)$/;
-        //   if (startIndex === -1) {
-            //     return tabularData; // Tabular data not found, return empty array
-            //   }
-            
-            // Iterate over the textArray from the start index to extract the tabular data
-    if(startIndex !== -1) {
-        for (let i = startIndex + 1; i < textArray.length; i++) {
-            // console.log('i', i)
-            const line = textArray[i];
-            console.log(textArray[i])
-            // console.log('line\n', line)
-            // Check if the line contains tabular data (item number, description, qty, rate, and amount)
-            // console.log('line\n', line.match(/^(\d+)\s(.+?)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)$/))
-            // console.log('---------')
-            // const tabularLineMatch = line.match(/^(\d+)\s(.+?)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)$/);
-            // const otherFields = line.trim().split(/^(\d+)\s(.+?)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)$/);
-            // console.log(otherFields, otherFields.length)
-            const tabularLineMatch = line.match(tabularMatch);
-            // console.log(tabularLineMatch)
-            if(tabularLineMatch){
-                // console.log('tabularLineMatch\n', tabularLineMatch)
-            // console.log('123')
-            // Split the tabular data line into individual columns
-            const [, itemNumber, itemDescription, quantity, rate, amount] = tabularLineMatch;
-            // line.trim().split(/\s+/);
-
-            // Create an object representing the tabular data row
-            const rowData = {
-                itemNumber,
-                itemDescription,
-                quantity,
-                rate,
-                amount,
-            };
-
-            // Add the object to the tabularData array
-            tabularData.push(rowData);
-            }
-            
-        }
-        invoiceInfo['products'] = tabularData;
-    } else {
-        invoiceInfo['products'] = [];
-    }
-
-
-    await worker.terminate();
-    console.log(invoiceInfo);
-        // writeFile('invoice_info_tesseract.txt', text, (err) => {
+        // writeFile('invoice2_info_tesseract.txt', text, (err) => {
         //     if (err) {
         //         console.error(err);
         //     } else {
         //         console.log('Invoice information stored successfully');
         //     }
         // });
+        // console.log('textArray\n', textArray);
+
+        const invoiceInfo = {};
+        const datePattern = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
+        const currencyPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?/g;
+
+        textArray.forEach((text, index) => {
+            if (
+                text.toLowerCase().includes('invoice date') || 
+                text.toLowerCase().includes('date issued')
+                ) {
+                invoiceInfo['invoice_date'] = textArray[index].includes(':') ?
+                textArray[index]?.split(':')[1]?.trim() : 
+                textArray[index + 1]?.trim().match(datePattern)[1] + '/' + textArray[index + 1]?.trim().match(datePattern)[2] + '/' + textArray[index + 1]?.trim().match(datePattern)[3]
+            }
+            if(text.toLowerCase().includes('due date')) {
+                invoiceInfo['due_date'] = textArray[index].includes(':') ? textArray[index]?.split(':')[1]?.trim() : 
+                textArray[index + 1]?.trim().match(datePattern)[1] + '/' + textArray[index + 1]?.trim().match(datePattern)[2] + '/' + textArray[index + 1]?.trim().match(datePattern)[3]
+            }
+            if(
+                text.toLowerCase().includes('bill to') || 
+                text.toLowerCase().includes('billed to')
+            ) {
+                invoiceInfo['customer_name'] = textArray[index + 1].trim().split(' ')[0] + ' ' + textArray[index + 1].trim().split(' ')[1];
+            }
+            if(
+                text.toLowerCase().includes('sub total') ||
+                text.toLowerCase().includes('subtotal')
+            ) {
+                invoiceInfo['sub_total'] = text.toLowerCase().includes('sub total') ? 
+                textArray[index].toLowerCase().trim().split('sub total')[1] : 
+                textArray[index].toLowerCase().trim().split('subtotal')[1];
+            }
+            if(text.toLowerCase().includes('total')) {
+                invoiceInfo['total'] = textArray[index].toLowerCase().trim().split('total ')[1];
+            }
+            if(
+                text.toLowerCase().includes('balance due') || 
+                text.toLowerCase().includes('amount due')
+            ) {
+                invoiceInfo['balance_due'] = text.toLowerCase().includes('balance due') ? 
+                textArray[index].toLowerCase().trim().split('balance due ')[1] :
+                textArray[index + 1].match(currencyPattern)[0]
+            }
+        
+        });
+        
+        // Find the start of the tabular data (where the line contains '# Item & Description Qty Rate Amount')
+        const tabularData = [];
+        const startIndex = textArray.findIndex((line) =>
+            line.toLowerCase().includes('# item & description qty rate amount') || line.toLowerCase().includes('rate amount') || line.toLowerCase().includes('description')
+        );
+            
+        if(startIndex !== -1) {
+            for (let i = startIndex + 1; i < textArray.length; i++) {
+                const line = textArray[i];
+                const itemArray = line?.trim()?.split(' ');
+                let itemDesc = '';
+                if(
+                    parseInt(itemArray[0]) && 
+                    parseInt(itemArray[itemArray.length - 1]) &&
+                    parseInt(itemArray[2]) &&
+                    itemArray.length >= 5
+                ) { 
+                    itemDesc = itemArray[1];
+                } else if(
+                    // parseInt(itemArray[0]) && 
+                    // parseInt(itemArray[itemArray.length - 1]) &&
+                    isNaN(parseInt(itemArray[0])) &&
+                    (!isNaN(parseInt(itemArray[itemArray.length - 1])) ||
+                    !isNaN(parseInt(itemArray[itemArray.length - 2]))) &&
+                    // parseInt(itemArray[2]) &&
+                    itemArray.length >= 4
+                ){
+                    itemDesc = itemArray[0];
+                }
+                else {
+                    // items if item description is more than one word
+                    itemArray.forEach((item) => {
+                        if(isNaN(parseInt(item))){
+                            itemDesc += item + ' ';
+                        }
+                    })
+                }
+                
+                if(
+                    !isNaN(parseInt(itemArray[0])) &&
+                    (!isNaN(parseInt(itemArray[itemArray.length - 3])) ||
+                    !isNaN(parseInt(itemArray[itemArray.length - 4]))) &&
+                    // !isNaN(parseInt(itemArray[itemArray.length - 2])) &&
+                    // !isNaN(parseInt(itemArray[itemArray.length - 1])) &&
+                    itemDesc.length > 0
+                ){
+                    const rowData = {
+                        itemNumber: !isNaN(parseInt(itemArray[0])) ? itemArray[0] : null,
+                        itemDescription: itemDesc,
+                        quantity: !isNaN(parseFloat(itemArray[itemArray.length - 3])) ? itemArray[itemArray.length - 3] : itemArray[itemArray.length - 4],
+                        rate: !isNaN(parseFloat(itemArray[itemArray.length - 2])) ? itemArray[itemArray.length - 2] : itemArray[itemArray.length - 3],
+                        amount: itemArray[itemArray.length - 1],
+                    }
+                    tabularData.push(rowData);
+                } else if (
+                    isNaN(parseInt(itemArray[0])) &&
+                    (!isNaN(parseInt(itemArray[itemArray.length - 2])) ||
+                    !isNaN(parseInt(itemArray[itemArray.length - 3]))) &&
+                    // !isNaN(parseInt(itemArray[itemArray.length - 2])) &&
+                    // !isNaN(parseInt(itemArray[itemArray.length - 1])) &&
+                    itemDesc.length > 0
+                ) {
+                    const rowData = {
+                        itemDescription: itemDesc,
+                        rate: itemArray[itemArray.length - 3],
+                        quantity: !isNaN(parseFloat(itemArray[itemArray.length - 2])) ? itemArray[itemArray.length - 2] : itemArray[itemArray.length - 3],
+                        amount: itemArray[itemArray.length - 1],
+                    }
+                    tabularData.push(rowData);
+                }
+                
+            }
+            invoiceInfo['products'] = tabularData;
+        } else {
+            invoiceInfo['products'] = [];
+        }
+        await worker.terminate();
         return res.status(200).json(
             invoiceInfo
         )
@@ -120,7 +155,7 @@ async function detectTextFromImageUsingTesseract(req, res) {
 
 async function detectTextFromImageUsingVision(req, res) {
     try {
-        const imagePath = './img/service-invoice-template-2x.jpg';
+        const imagePath = './img/invoice-1.jpg';
         // Instantiates a client
         const client = new ImageAnnotatorClient({
             // keyFilename: './private/anchorbooks-ocr-22132c92e2d5.json'
@@ -233,14 +268,14 @@ async function detectTextFromImageUsingVision(req, res) {
             // invoiceInfo[text] = boundingBox;
         // }
 
-        // writeFile('invoice_info.txt', result.textAnnotations[0].boundingPoly.vertices.toString(), (err) => {
-        //     if (err) {
-        //         console.error(err);
-        //     } else {
-        //         console.log('Invoice information stored successfully');
-        //     }
-        // });
-        // console.log({invoiceInfo})
+        writeFile('invoice_info_anchor.txt', result.textAnnotations[0].boundingPoly.vertices.toString(), (err) => {
+            if (err) {
+                console.error(err);
+            } else {
+                console.log('Invoice information stored successfully');
+            }
+        });
+        console.log({invoiceInfo})
 
         // const detections = result.textAnnotations;
         // const extractedText = detections[0].description; // The first annotation contains the entire detected text
@@ -260,12 +295,6 @@ async function detectTextFromImageUsingVision(req, res) {
     }
 }
 
-// detectTextFromImage().then((res) => {
-//     console.log(res.bold)
-// }).catch((err) => {
-//     console.error(err.red.bold)
-// })
-
 
 
 const main = async (req, res) => {
@@ -276,6 +305,6 @@ const main = async (req, res) => {
 
 export {
     main,
-    // detectTextFromImageUsingVision
+    // detectTextFromImageUsingVision,
     detectTextFromImageUsingTesseract
 }

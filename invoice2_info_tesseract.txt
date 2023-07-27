@@ -1,0 +1,30 @@
+Sample Invoice —
+1234 Your Street
+City, California
+,0 - - 90210
+(4 Click to edit
+1-888-123-4567
+Billed To Date Issued Invoice Number ~ Amount Due
+Your Client 26/3/2021 INV-10012 $1,699.48
+1234 Clients Street.
+City, California Due Date
+90210 25/4/2021
+United States
+1-888-123-8910
+DESCRIPTION RATE Qry AMOUNT
+Services $55.00 10 $550.00
+Cost of various services. +Tax
+Consulting $75.00 15 $1125.00
+Consultant for your business. +Tax
+Materials $12339 1 $123.39
+Cost of materials and supplies to complete job. +Tax
+Subtotal $1,798.39
+Discount -$179.84
+Tax +$80.93
+Total $1,699.48
+Deposit Requested $169.95
+Deposit Due $169.95
+Notes
+Thank you for your business!
+Terms
+Please pay within 30 days using the link in your invoice email.
