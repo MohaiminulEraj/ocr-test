@@ -7,139 +7,333 @@ async function detectTextFromImageUsingTesseract(req, res) {
         const worker = await createWorker();
         await worker?.loadLanguage('eng');
         await worker?.initialize('eng');
-        const { data: { text } } = await worker?.recognize('./img/invoice-1.png');
+        const { data: { text } } = await worker?.recognize('./img/AnchorExpense.png');
         let textArray = text.split('\n');
-        // writeFile('invoice2_info_tesseract.txt', text, (err) => {
-        //     if (err) {
-        //         console.error(err);
-        //     } else {
-        //         console.log('Invoice information stored successfully');
-        //     }
-        // });
-        // console.log('textArray\n', textArray);
-
-        const invoiceInfo = {};
-        const datePattern = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
-        const currencyPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?/g;
-
-        textArray.forEach((text, index) => {
-            if (
-                text.toLowerCase().includes('invoice date') || 
-                text.toLowerCase().includes('date issued')
-                ) {
-                invoiceInfo['invoice_date'] = textArray[index].includes(':') ?
-                textArray[index]?.split(':')[1]?.trim() : 
-                textArray[index + 1]?.trim().match(datePattern)[1] + '/' + textArray[index + 1]?.trim().match(datePattern)[2] + '/' + textArray[index + 1]?.trim().match(datePattern)[3]
+        writeFile('anchorExpense_info_tesseract.txt', text, (err) => {
+            if (err) {
+                console.error(err);
+            } else {
+                console.log('Expense information stored successfully');
             }
-            if(text.toLowerCase().includes('due date')) {
-                invoiceInfo['due_date'] = textArray[index].includes(':') ? textArray[index]?.split(':')[1]?.trim() : 
-                textArray[index + 1]?.trim().match(datePattern)[1] + '/' + textArray[index + 1]?.trim().match(datePattern)[2] + '/' + textArray[index + 1]?.trim().match(datePattern)[3]
-            }
-            if(
-                text.toLowerCase().includes('bill to') || 
-                text.toLowerCase().includes('billed to')
-            ) {
-                invoiceInfo['customer_name'] = textArray[index + 1].trim().split(' ')[0] + ' ' + textArray[index + 1].trim().split(' ')[1];
-            }
-            if(
-                text.toLowerCase().includes('sub total') ||
-                text.toLowerCase().includes('subtotal')
-            ) {
-                invoiceInfo['sub_total'] = text.toLowerCase().includes('sub total') ? 
-                textArray[index].toLowerCase().trim().split('sub total')[1] : 
-                textArray[index].toLowerCase().trim().split('subtotal')[1];
-            }
-            if(text.toLowerCase().includes('total')) {
-                invoiceInfo['total'] = textArray[index].toLowerCase().trim().split('total ')[1];
-            }
-            if(
-                text.toLowerCase().includes('balance due') || 
-                text.toLowerCase().includes('amount due')
-            ) {
-                invoiceInfo['balance_due'] = text.toLowerCase().includes('balance due') ? 
-                textArray[index].toLowerCase().trim().split('balance due ')[1] :
-                textArray[index + 1].match(currencyPattern)[0]
-            }
-        
         });
-        
+        const invoiceInfo: any = {
+            invoiceNumber: null,
+            invoiceDate: null,
+            dueDate: null,
+            customerName: null
+        }
+        const datePattern = /(\d{1,2})\/(\d{1,2})\/(\d{4})/
+        const currencyPattern2 = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?/g
+        const currencyPattern =
+            /([$€£]\s?\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d{2})?|\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d{2})?\s?[$€£])/
+
+        const emailPattern = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/
+
+        const invoiceRegx = /INV-\w+/
+
+        try {
+            textArray.forEach((text, index) => {
+                if (
+                    text.toLowerCase().includes('invoice date') ||
+                    text.toLowerCase().includes('date issued')
+                ) {
+                    invoiceInfo['invoiceDate'] = textArray[index].includes(
+                        ':'
+                    )
+                        ? new Date(
+                              textArray[index]?.split(':')[1]?.trim()
+                          ).getTime()
+                        : new Date(
+                              textArray[index + 1]
+                                  ?.trim()
+                                  ?.match(datePattern)[2] +
+                                  '/' +
+                                  textArray[index + 1]
+                                      ?.trim()
+                                      ?.match(datePattern)[1] +
+                                  '/' +
+                                  textArray[index + 1]
+                                      ?.trim()
+                                      .match(datePattern)[3]
+                          ).getTime()
+                }
+                if (
+                    text.toLowerCase().includes('invoice no') ||
+                    text.toLowerCase().includes('invoice number') ||
+                    text.toLowerCase().includes('inv-')
+                ) {
+                    invoiceInfo['invoiceNumber'] = textArray[
+                        index
+                    ].includes(':')
+                        ? textArray[index]?.split(':')[1]?.trim()
+                        : textArray[index]?.trim()?.match(invoiceRegx)
+                        ? textArray[index]?.trim()?.match(invoiceRegx)[0]
+                        : textArray[index]?.trim()
+                }
+                if (text.toLowerCase().includes('due date')) {
+                    invoiceInfo['dueDate'] = textArray[index].includes(':')
+                        ? new Date(
+                              textArray[index]?.split(':')[1]?.trim()
+                          ).getTime()
+                        : new Date(
+                              textArray[index + 1]
+                                  ?.trim()
+                                  ?.match(datePattern)[2] +
+                                  '/' +
+                                  textArray[index + 1]
+                                      ?.trim()
+                                      ?.match(datePattern)[1] +
+                                  '/' +
+                                  textArray[index + 1]
+                                      ?.trim()
+                                      .match(datePattern)[3]
+                          ).getTime()
+                }
+                if (
+                    text.toLowerCase().includes('bill to') ||
+                    text.toLowerCase().includes('billed to')
+                ) {
+                    invoiceInfo['customerName'] =
+                        textArray[index + 1]?.trim()?.split(' ')[0] +
+                            ' ' +
+                            textArray[index + 1]?.trim()?.split(' ')[1] !==
+                            'Invoice' &&
+                        textArray[index + 1]?.trim()?.split(' ')[0]
+                }
+                if (text.toLowerCase().includes('company')) {
+                    invoiceInfo['customerCompany'] = textArray[
+                        index
+                    ].includes(':')
+                        ? textArray[index]?.split(':')[1]?.trim()
+                        : textArray[index + 1]?.trim()
+                }
+                if (
+                    text.toLowerCase().includes('email') &&
+                    (textArray[index + 1]?.trim()?.match(emailPattern) ||
+                        textArray[index]?.trim()?.match(emailPattern))
+                ) {
+                    invoiceInfo['customerEmail'] = textArray[
+                        index
+                    ].includes(':')
+                        ? textArray[index]
+                              ?.split(':')[1]
+                              ?.trim()
+                              ?.match(emailPattern)[0]
+                        : textArray[index + 1]
+                              ?.trim()
+                              ?.match(emailPattern)[0]
+                }
+                if (
+                    text.toLowerCase().includes('phone') &&
+                    textArray[index].includes(':')
+                ) {
+                    invoiceInfo['customerPhone'] = textArray[index]
+                        ?.split(':')[1]
+                        ?.trim()
+                }
+                if (
+                    text.toLowerCase().includes('sub total') ||
+                    text.toLowerCase().includes('subtotal')
+                ) {
+                    invoiceInfo['subTotal'] = text
+                        .toLowerCase()
+                        .includes('sub total')
+                        ? textArray[index]
+                              .toLowerCase()
+                              .trim()
+                              .split('sub total')[1]
+                        : textArray[index]
+                              .toLowerCase()
+                              .trim()
+                              .split('subtotal')[1]
+                    if (invoiceInfo['subTotal']?.match(currencyPattern)) {
+                        invoiceInfo['subTotal'] = parseFloat(
+                            invoiceInfo['subTotal']?.replace(
+                                /[$€£,\s]/g,
+                                ''
+                            )
+                        )
+                    }
+                }
+                if (text.toLowerCase().includes('total')) {
+                    invoiceInfo['total'] = textArray[index]
+                        ?.toLowerCase()
+                        ?.trim()
+                        ?.split('total ')[1]
+
+                    if (invoiceInfo['total']?.match(currencyPattern)) {
+                        invoiceInfo['total'] = parseFloat(
+                            invoiceInfo['total']?.replace(/[$€£,\s]/g, '')
+                        )
+                    }
+                }
+                if (
+                    text.toLowerCase().includes('balance due') ||
+                    text.toLowerCase().includes('amount due')
+                ) {
+                    invoiceInfo['balanceDue'] = text
+                        .toLowerCase()
+                        .includes('balance due')
+                        ? textArray[index]
+                              ?.toLowerCase()
+                              ?.trim()
+                              ?.split('balance due ')[1]
+                        : textArray[index + 1]?.match(currencyPattern2)[0]
+                    if (
+                        invoiceInfo['balanceDue']?.match(currencyPattern2)
+                    ) {
+                        invoiceInfo['balanceDue'] = parseFloat(
+                            invoiceInfo['balanceDue']?.replace(
+                                /[$€£,\s]/g,
+                                ''
+                            )
+                        )
+                    }
+                }
+            })
+        } catch (error) {
+            console.error(error)
+        }
         // Find the start of the tabular data (where the line contains '# Item & Description Qty Rate Amount')
-        const tabularData = [];
-        const startIndex = textArray.findIndex((line) =>
-            line.toLowerCase().includes('# item & description qty rate amount') || line.toLowerCase().includes('rate amount') || line.toLowerCase().includes('description')
-        );
-            
-        if(startIndex !== -1) {
+        const tabularData = []
+        const startIndex = textArray.findIndex(
+            (line) =>
+                line
+                    .toLowerCase()
+                    .includes('# item & description qty rate amount') ||
+                line.toLowerCase().includes('rate amount') ||
+                line.toLowerCase().includes('description')
+        )
+        if (startIndex !== -1) {
             for (let i = startIndex + 1; i < textArray.length; i++) {
-                const line = textArray[i];
-                const itemArray = line?.trim()?.split(' ');
-                let itemDesc = '';
-                if(
-                    parseInt(itemArray[0]) && 
-                    parseInt(itemArray[itemArray.length - 1]) &&
-                    parseInt(itemArray[2]) &&
+                const line = textArray[i]
+                // const itemArray = line?.trim()?.split(' ')
+                const itemArray = line?.trim()?.split(/\s+/)
+                let itemDesc = ''
+                if (
+                    parseInt(itemArray[0]) &&
+                    // parseInt(itemArray[itemArray.length - 1]) &&
+                    (!parseFloat(itemArray[1]) ||
+                        !itemArray[1]?.match(currencyPattern)) &&
+                    !isNaN(parseInt(itemArray[2])) &&
                     itemArray.length >= 5
-                ) { 
-                    itemDesc = itemArray[1];
-                } else if(
-                    // parseInt(itemArray[0]) && 
+                ) {
+                    itemDesc = itemArray[1]
+                    if (!itemArray[2]?.match(currencyPattern)) {
+                        itemDesc += ' ' + itemArray[2]
+                    }
+                } else if (
+                    // parseInt(itemArray[0]) &&
                     // parseInt(itemArray[itemArray.length - 1]) &&
                     isNaN(parseInt(itemArray[0])) &&
                     (!isNaN(parseInt(itemArray[itemArray.length - 1])) ||
-                    !isNaN(parseInt(itemArray[itemArray.length - 2]))) &&
+                        !isNaN(
+                            parseInt(itemArray[itemArray.length - 2])
+                        )) &&
                     // parseInt(itemArray[2]) &&
                     itemArray.length >= 4
-                ){
-                    itemDesc = itemArray[0];
-                }
-                else {
+                ) {
+                    itemDesc = itemArray[0]
+                } else {
                     // items if item description is more than one word
                     itemArray.forEach((item) => {
-                        if(isNaN(parseInt(item))){
-                            itemDesc += item + ' ';
+                        // if (isNaN(parseInt(item))) {
+                        if (
+                            !item?.match(currencyPattern) &&
+                            !parseFloat(item)
+                        ) {
+                            itemDesc += item + ' '
                         }
                     })
                 }
-                
-                if(
+
+                if (
                     !isNaN(parseInt(itemArray[0])) &&
                     (!isNaN(parseInt(itemArray[itemArray.length - 3])) ||
-                    !isNaN(parseInt(itemArray[itemArray.length - 4]))) &&
-                    // !isNaN(parseInt(itemArray[itemArray.length - 2])) &&
-                    // !isNaN(parseInt(itemArray[itemArray.length - 1])) &&
-                    itemDesc.length > 0
-                ){
-                    const rowData = {
-                        itemNumber: !isNaN(parseInt(itemArray[0])) ? itemArray[0] : null,
-                        itemDescription: itemDesc,
-                        quantity: !isNaN(parseFloat(itemArray[itemArray.length - 3])) ? itemArray[itemArray.length - 3] : itemArray[itemArray.length - 4],
-                        rate: !isNaN(parseFloat(itemArray[itemArray.length - 2])) ? itemArray[itemArray.length - 2] : itemArray[itemArray.length - 3],
-                        amount: itemArray[itemArray.length - 1],
-                    }
-                    tabularData.push(rowData);
-                } else if (
-                    isNaN(parseInt(itemArray[0])) &&
-                    (!isNaN(parseInt(itemArray[itemArray.length - 2])) ||
-                    !isNaN(parseInt(itemArray[itemArray.length - 3]))) &&
+                        !isNaN(
+                            parseInt(itemArray[itemArray.length - 4])
+                        )) &&
                     // !isNaN(parseInt(itemArray[itemArray.length - 2])) &&
                     // !isNaN(parseInt(itemArray[itemArray.length - 1])) &&
                     itemDesc.length > 0
                 ) {
-                    const rowData = {
-                        itemDescription: itemDesc,
-                        rate: itemArray[itemArray.length - 3],
-                        quantity: !isNaN(parseFloat(itemArray[itemArray.length - 2])) ? itemArray[itemArray.length - 2] : itemArray[itemArray.length - 3],
-                        amount: itemArray[itemArray.length - 1],
+                    const rowData: any = {
+                        itemNumber: !isNaN(parseInt(itemArray[0]))
+                            ? parseInt(itemArray[0])
+                            : null,
+                        item: itemDesc,
+                        quantity: !isNaN(
+                            parseFloat(itemArray[itemArray.length - 3])
+                        )
+                            ? parseFloat(itemArray[itemArray.length - 3])
+                            : parseFloat(itemArray[itemArray.length - 4]),
+                        rate:
+                            itemArray[itemArray.length - 2]?.match(
+                                currencyPattern
+                            ) ||
+                            !isNaN(
+                                parseFloat(itemArray[itemArray.length - 2])
+                            )
+                                ? itemArray[itemArray.length - 2]
+                                : itemArray[itemArray.length - 3],
+                        total: itemArray[itemArray.length - 1]
                     }
-                    tabularData.push(rowData);
+                    rowData.rate = parseFloat(
+                        rowData?.rate?.replace(/[$€£,\s]/g, '')
+                    )
+
+                    rowData.total = parseFloat(
+                        rowData?.total?.replace(/[$€£,\s]/g, '')
+                    )
+                    if (
+                        rowData?.total <
+                        rowData?.rate * rowData?.quantity
+                    ) {
+                        rowData.total = rowData?.rate * rowData?.quantity
+                    }
+                    tabularData.push(rowData)
+                } else if (
+                    isNaN(parseInt(itemArray[0])) &&
+                    (!isNaN(parseInt(itemArray[itemArray.length - 2])) ||
+                        !isNaN(
+                            parseInt(itemArray[itemArray.length - 3])
+                        )) &&
+                    // !isNaN(parseInt(itemArray[itemArray.length - 2])) &&
+                    // !isNaN(parseInt(itemArray[itemArray.length - 1])) &&
+                    itemDesc.length > 0
+                ) {
+                    const rowData: any = {
+                        itemNumber: null,
+                        item: itemDesc,
+                        rate: itemArray[itemArray.length - 3],
+                        quantity: !isNaN(
+                            parseFloat(itemArray[itemArray.length - 2])
+                        )
+                            ? parseFloat(itemArray[itemArray.length - 2])
+                            : itemArray[itemArray.length - 3],
+                        total: itemArray[itemArray.length - 1]
+                    }
+                    rowData.rate = parseFloat(
+                        rowData?.rate?.replace(/[$€£,\s]/g, '')
+                    )
+
+                    rowData.total = parseFloat(
+                        rowData?.total?.replace(/[$€£,\s]/g, '')
+                    )
+                    if (
+                        rowData?.total <
+                        rowData?.rate * rowData?.quantity
+                    ) {
+                        rowData.total = rowData?.rate * rowData?.quantity
+                    }
+                    tabularData.push(rowData)
                 }
-                
             }
-            invoiceInfo['products'] = tabularData;
+            invoiceInfo['products'] = tabularData
         } else {
-            invoiceInfo['products'] = [];
+            invoiceInfo['products'] = []
         }
-        await worker.terminate();
+        await worker.terminate()
         return res.status(200).json(
             invoiceInfo
         )
